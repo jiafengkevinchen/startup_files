@@ -71,7 +71,7 @@ def mathify(s, num_digit=3, large=9, phantom_space=False,
             lst = s.split("E")
             s = f"{lst[0]} \\times 10^{{{int(lst[-1])}}}"
         elif abs(s - round(s)) < 1e-10:
-            s = "{:,}".format(round(s))
+            s = "{:,}".format(int(round(s)))
 
         else:
             s = ('{:.' + str(num_digit) + 'f}').format(s)
@@ -111,12 +111,25 @@ def interleave(l1, l2):
     return [val for pair in zip(l1, l2) for val in pair]
 
 
-def consolidate_se(df, coef_cols, se_cols):
+def consolidate_se(df, coef_cols, se_cols, add_stars=False):
+    from scipy.stats import norm
     rest = list(filter(lambda x : x not in coef_cols and x not in se_cols, df.columns))
     return_df = []
     for coef_col, se_col in zip(coef_cols, se_cols):
+        p_vals = norm.cdf(-np.abs(df[coef_col]/df[se_col]).values) * 2
         se = df[se_col].apply(lambda x : f"({x})")
         coef = df[coef_col].copy()
+        if add_stars:
+            for i, p in enumerate(p_vals):
+                if p < .01:
+                    coef.iloc[i] = str(coef.values[i]) + '***'
+                elif p < .05:
+                    coef.iloc[i] = str(coef.values[i]) + '**'
+                elif p < .1:
+                    coef.iloc[i] = str(coef.values[i]) + '*'
+                else:
+                    coef.iloc[i] = str(coef.values[i])
+
         v = interleave(coef.values, se.values)
         return_df.append(pd.Series(v, index=interleave(coef.index,
             [''] * len(se)), name=coef_col))
@@ -162,7 +175,7 @@ def to_table(df, caption,
     pd.set_option('max_colwidth', opt_val)
 
     # No threeparttable
-    if not notes:
+    if notes is None:
         s = f"""\\begin{{table}}[tbh]
         \\caption{{{caption}}}
         \\label{{tab:{label}}}
@@ -178,7 +191,7 @@ def to_table(df, caption,
                     \\textsuperscript{{**}}$p<.05$,
                     \\textsuperscript{{***}}$p<.01$. {notes}"""
         s = f'''
-        \\begin{{table}}[%s]
+        \\begin{{table}}[tbh]
         \\caption{{{caption}}}
         \\label{{tab:{label}}}
         \\centering
